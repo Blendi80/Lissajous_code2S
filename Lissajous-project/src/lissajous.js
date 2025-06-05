@@ -1,32 +1,30 @@
 import * as Tone from "tone";
 import { Midi } from "@tonejs/midi";
 
+// Classe principale pour gérer l'animation et la musique
 class Lissajous {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
+
+    // Centre et paramètres du mouvement
     this.center = {
       x: canvas.width / 2,
       y: canvas.height / 2,
     };
-    // paramètres de base pour la première musique (etta.mid)
     this.motion_radiusX = canvas.width / 2.5;
     this.motion_radiusY = canvas.height / 3;
-    this.freqX = 3; // fréquence X pour etta.mid
-    this.freqY = 2; // fréquence Y pour etta.mid
-    this.angleX = 0;
-    this.angleY = 0;
+    this.freqX = 3;
+    this.freqY = 2;
+
+    // Balle animée
     this.ball = { x: 0, y: 0, size: 15 };
     this.isMusicFinished = false;
-    this.isTouching = false;
-    this.lastTouchPosition = null;
-    this.touchEnabled = false;
     this.trailOpacity = 1;
     this.trailColor = "#FF4D00";
     this.secondTrailColor = "#1cb78f";
     this.fadeDuration = 4000;
     this.currentMidiFile = "etta.mid";
-    this.lastTapTime = 0;
     this.doubleTapDelay = 300;
     this.useCircles = false;
     this.permanentTrail = [];
@@ -34,10 +32,11 @@ class Lissajous {
     this.lines = [];
     this.trail = [];
     this.maxTrailLength = 100;
-
-    // couleur de la balle et de la traînée
     this.ballColor = "black";
     this.possibleColors = ["#cbe3f6", "#ff4d00", "#fddc46", "#1cb78f"];
+    this.lastTapTime = 0;
+    this.isTouching = false;
+    this.lastTouchPosition = null;
 
     // initialiser l'instrument
     this.synth = new Tone.Sampler({
@@ -53,91 +52,60 @@ class Lissajous {
       },
     }).toDestination();
 
-    // charger le fichier MIDI
+    // Chargement du fichier MIDI initial
     this.loadMidiFile();
-
-    // animation frame pour les effets
     this.animationFrame = 0;
   }
 
   async loadMidiFile() {
     try {
-      console.log("Chargement du fichier MIDI...");
       const response = await fetch(`/${this.currentMidiFile}`);
       const arrayBuffer = await response.arrayBuffer();
-
-      // Réinitialiser l'état
       this.isMusicFinished = false;
       this.trail = [];
       this.visualMidiNotes = [];
       this.trailOpacity = 1;
       this.permanentTrail = [];
-
-      // Réinitialiser la position de la balle au point de départ
+      // Positionne la balle au début
       const t = 0;
       this.ball.x =
         this.center.x + Math.cos(t * this.freqX) * this.motion_radiusX;
       this.ball.y =
         this.center.y + Math.sin(t * this.freqY) * this.motion_radiusY;
-
-      // Ajouter le point de départ au tracé permanent
       this.permanentTrail.push({ x: this.ball.x, y: this.ball.y });
-
-      // Afficher le logo au début
+      // Affiche le logo si présent
       const logo = document.querySelector(".center-image");
-      if (logo) {
-        logo.style.display = "block";
-      }
-
-      // Analyser le fichier MIDI avec @tonejs/midi
+      if (logo) logo.style.display = "block";
+      // Parse le MIDI
       const midi = new Midi(arrayBuffer);
-      console.log("Fichier MIDI chargé:", midi);
-
-      // Extraire toutes les notes de toutes les pistes
       const notes = [];
       midi.tracks.forEach((track) => {
-        if (track.notes && track.notes.length > 0) {
-          notes.push(...track.notes);
-        }
+        if (track.notes && track.notes.length > 0) notes.push(...track.notes);
       });
-
       this.playMidiSequenceWithTimeout(notes);
     } catch (error) {
       console.error("Erreur lors du chargement du fichier MIDI:", error);
+      // Si erreur, génère des lignes aléatoires pour l'affichage
       this.generateRandomLines(50);
     }
   }
 
+  // --- Prépare les notes MIDI pour l'animation et le son ---
   playMidiSequenceWithTimeout(notes) {
-    // cacher le logo
     const logo = document.querySelector(".center-image");
-    if (logo) {
-      logo.classList.add("hidden");
-    }
-
+    if (logo) logo.classList.add("hidden");
     this.visualMidiNotes = [];
+    // Calcule la durée totale de la séquence
     this.TOTAL_TIME = Math.max(
       ...notes.map((note) => note.time + note.duration)
     );
-    console.log("max time", this.TOTAL_TIME);
-    const totalwidth = this.canvas.width;
-
-    // trier les notes par temps
     notes.sort((a, b) => a.time - b.time);
-
     notes.forEach((note) => {
       const freq = Tone.Frequency(note.midi, "midi");
-      const duration = note.duration;
-      const velocity = note.velocity;
-      const time = note.time;
-      const timeout = time * 1000;
-
-      // utiliser les fréquences spécifiques à chaque musique pour le positionnement des notes
-      const t = (time / this.TOTAL_TIME) * Math.PI * 2;
+      const t = (note.time / this.TOTAL_TIME) * Math.PI * 2;
       const x = this.center.x + Math.cos(t * this.freqX) * this.motion_radiusX;
       const y = this.center.y + Math.sin(t * this.freqY) * this.motion_radiusY;
-
-      // ajouter des paramètres aléatoires pour l'effet de vague
+      // Paramètres pour les effets visuels
       const waveParams = {
         phase1: Math.random() * Math.PI * 2,
         phase2: Math.random() * Math.PI * 2,
@@ -148,7 +116,6 @@ class Lissajous {
         amp1: 15 + Math.random() * 10,
         amp2: 5 + Math.random() * 8,
         amp3: 2 + Math.random() * 5,
-        // paramètres pour la déformation du cercle
         circleDeformPoints: Math.floor(4 + Math.random() * 4),
         circleDeformAngles: Array.from(
           { length: 8 },
@@ -156,110 +123,79 @@ class Lissajous {
         ),
         circleDeformStrength: 0.2 + Math.random() * 0.3,
       };
-
       this.visualMidiNotes.push({
-        x: x,
-        y: y,
+        x,
+        y,
         midi: note.midi,
-        freq: freq,
-        duration: duration,
-        velocity: velocity,
+        freq,
+        duration: note.duration,
+        velocity: note.velocity,
         triggered: false,
-        time: time,
+        time: note.time,
         visible: false,
         color: "#ffffff",
-        waveParams: waveParams,
+        waveParams,
         lastPlayed: 0,
         playCount: 0,
       });
     });
-
-    // démarrer la lecture
     this.startTime = new Date().getTime();
-    Tone.start();
+    Tone.start(); // Nécessaire pour activer l'audio après interaction utilisateur
   }
 
+  // --- Génère des lignes aléatoires si pas de MIDI ---
   generateRandomLines(count) {
     const sections = count;
     const sectionSize = (Math.PI * 2) / sections;
-
     for (let i = 0; i < count; i++) {
-      // position sur la courbe avec une petite variation aléatoire
       const baseT = i * sectionSize;
       const t = baseT + (Math.random() * 0.5 - 0.25) * sectionSize;
-
       const x = this.center.x + Math.cos(t * 3) * this.motion_radiusX;
       const y = this.center.y + Math.sin(t * 2) * this.motion_radiusY;
-
       const angle = Math.random() * Math.PI * 2;
-
-      // longueur aléatoire du trait
       const length = 15 + Math.random() * 35;
-
-      this.lines.push({
-        x: x,
-        y: y,
-        angle: angle,
-        length: length,
-        triggered: false,
-      });
+      this.lines.push({ x, y, angle, length, triggered: false });
     }
   }
 
+  // --- Animation principale : mouvement de la balle, gestion des notes, fondu ---
   move() {
     if (this.startTime && this.TOTAL_TIME) {
       const currentTime = new Date().getTime();
       const percentage =
         (currentTime - this.startTime) / (this.TOTAL_TIME * 1000);
       const t = percentage * Math.PI * 2;
-
-      // calculer la nouvelle position
       const newX =
         this.center.x + Math.cos(t * this.freqX) * this.motion_radiusX;
       const newY =
         this.center.y + Math.sin(t * this.freqY) * this.motion_radiusY;
-
-      // vérifier si la position a changé significativement
       const dx = newX - this.ball.x;
       const dy = newY - this.ball.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // ne mettre à jour la position que si le changement est significatif
       if (distance > 0.1) {
         this.ball.x = newX;
         this.ball.y = newY;
-
-        // ajouter la position au tracé permanent pendant la première phase
         if (!this.isMusicFinished) {
           this.permanentTrail.push({ x: this.ball.x, y: this.ball.y });
         }
       }
-
-      // mettre à jour la traînée avec effet de lueur
+      // Ajoute la position actuelle à la traînée
       if (!this.isMusicFinished) {
-        // ajouter la position actuelle à la traînée
         this.trail.push({ x: this.ball.x, y: this.ball.y });
-
-        // limiter la longueur de la traînée
-        if (this.trail.length > this.maxTrailLength) {
-          this.trail.shift();
-        }
+        if (this.trail.length > this.maxTrailLength) this.trail.shift();
       }
-
-      // rendre visible les notes exactement au moment où elles doivent être jouées
+      // Active les notes à jouer selon le temps
       if (this.visualMidiNotes) {
         this.visualMidiNotes.forEach((note) => {
           const noteTime = note.time / this.TOTAL_TIME;
           const timeUntilNote = noteTime - percentage;
-
           if (timeUntilNote <= 0 && !note.visible) {
             note.visible = true;
             note.opacity = 1;
           }
         });
       }
-
-      // vérifier si la musique est terminée
+      // Déclenche le fondu à la fin de la séquence
       if (percentage >= 1 && !this.isMusicFinished) {
         this.isMusicFinished = true;
         this.fadeStartTime = Date.now();
@@ -270,39 +206,34 @@ class Lissajous {
           });
         }
       }
-
-      // gérer l'effet de fondu après la fin de la musique
+      // Gère le fondu visuel des notes et de la traînée
       if (this.isMusicFinished && this.fadeStartTime) {
         const timeSinceFade = Date.now() - this.fadeStartTime;
         const fadeProgress = Math.min(1, timeSinceFade / this.fadeDuration);
         const easedProgress = 1 - Math.pow(1 - fadeProgress, 3);
-
         this.trailOpacity = Math.max(0, 1 - easedProgress);
-
         if (this.visualMidiNotes) {
           this.visualMidiNotes.forEach((note) => {
             note.opacity = Math.max(0, 1 - easedProgress);
           });
         }
       }
-
       this.checkCollisions();
     }
   }
 
+  // --- Détection des collisions entre la balle et les notes/lignes ---
   checkCollisions() {
     if (this.isMusicFinished) return;
-
     const ballRadius = this.ball.size / 2;
     const currentTime = Date.now();
     const minTimeBetweenPlays = 100;
-
+    // Collision avec les notes MIDI
     if (this.visualMidiNotes) {
       this.visualMidiNotes.forEach((note) => {
         const dx = this.ball.x - note.x;
         const dy = this.ball.y - note.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-
         if (distance < ballRadius + 5 && !note.triggered && note.visible) {
           if (currentTime - note.lastPlayed > minTimeBetweenPlays) {
             note.triggered = true;
@@ -313,8 +244,6 @@ class Lissajous {
               this.possibleColors[
                 Math.floor(Math.random() * this.possibleColors.length)
               ];
-
-            // ne jouer le son que si la note n'a pas déjà été jouée
             if (note.playCount === 1) {
               this.synth.triggerAttackRelease(
                 note.freq,
@@ -323,7 +252,6 @@ class Lissajous {
                 note.velocity
               );
             }
-
             setTimeout(() => {
               note.triggered = false;
             }, 1000);
@@ -331,13 +259,11 @@ class Lissajous {
         }
       });
     }
-
-    // vérifier les collisions avec les lignes existantes
+    // Collision avec les lignes aléatoires (si générées)
     this.lines.forEach((line) => {
       const dx = this.ball.x - line.x;
       const dy = this.ball.y - line.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-
       if (distance < ballRadius + line.length / 2 && !line.triggered) {
         line.triggered = true;
         line.hitTime = currentTime;
@@ -345,7 +271,6 @@ class Lissajous {
           this.possibleColors[
             Math.floor(Math.random() * this.possibleColors.length)
           ];
-
         if (line.note && !line.hasPlayed) {
           const freq = Tone.Frequency(line.note.midi, "midi");
           this.synth.triggerAttackRelease(
@@ -356,7 +281,6 @@ class Lissajous {
           );
           line.hasPlayed = true;
         }
-
         setTimeout(() => {
           line.triggered = false;
         }, 1000);
@@ -364,10 +288,10 @@ class Lissajous {
     });
   }
 
+  // --- Dessin principal (trails, notes, effets) ---
   draw() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.animationFrame++;
-
     // dessiner le tracé permanent en premier (toujours visible)
     if (this.permanentTrail.length > 1) {
       this.ctx.beginPath();
@@ -612,23 +536,17 @@ class Lissajous {
     }
   }
 
-  // nouvelle méthode pour gérer les interactions tactiles
+  // --- Gestion du tactile pour mobile/tablette ---
   handleTouchStart(event) {
     const touch = event.touches[0];
     const currentTime = new Date().getTime();
     const tapLength = currentTime - this.lastTapTime;
-
-    // vérifier si c'est un double-tap
     if (tapLength < this.doubleTapDelay && tapLength > 0) {
-      // double-tap détecté, changer de musique
       this.switchMidiFile();
-      this.lastTapTime = 0; // réinitialiser pour éviter les triples-taps
+      this.lastTapTime = 0;
       return;
     }
-
     this.lastTapTime = currentTime;
-
-    // permettre l'interaction tactile même si la musique n'est pas terminée
     this.isTouching = true;
     const rect = this.canvas.getBoundingClientRect();
     this.lastTouchPosition = {
@@ -639,22 +557,19 @@ class Lissajous {
 
   handleTouchMove(event) {
     if (!this.isTouching) return;
-
     const touch = event.touches[0];
     const rect = this.canvas.getBoundingClientRect();
     const currentPosition = {
       x: touch.clientX - rect.left,
       y: touch.clientY - rect.top,
     };
-
-    // vérifier les collisions avec les notes
+    // Déclenche les notes si on touche près d'une note visible
     if (this.visualMidiNotes) {
       this.visualMidiNotes.forEach((note) => {
         if (note.visible) {
           const dx = currentPosition.x - note.x;
           const dy = currentPosition.y - note.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-
           if (distance < 20 && !note.triggered) {
             note.triggered = true;
             note.hitTime = Date.now();
@@ -670,7 +585,6 @@ class Lissajous {
               undefined,
               note.velocity
             );
-
             setTimeout(() => {
               note.triggered = false;
             }, 1000);
@@ -678,7 +592,6 @@ class Lissajous {
         }
       });
     }
-
     this.lastTouchPosition = currentPosition;
   }
 
@@ -687,19 +600,14 @@ class Lissajous {
     this.lastTouchPosition = null;
   }
 
+  // --- Permet de changer de fichier MIDI (double tap) ---
   switchMidiFile() {
     this.currentMidiFile =
       this.currentMidiFile === "etta.mid" ? "blind.mid" : "etta.mid";
     this.useCircles = this.currentMidiFile === "blind.mid";
-
-    // effacer le tracé permanent
     this.permanentTrail = [];
-
-    // changer la couleur du tracé selon la musique
     this.trailColor =
       this.currentMidiFile === "blind.mid" ? this.secondTrailColor : "#FF4D00";
-
-    // changer les paramètres de la courbe selon la musique
     if (this.currentMidiFile === "blind.mid") {
       this.motion_radiusX = this.canvas.width / 3;
       this.motion_radiusY = this.canvas.height / 2.5;
@@ -711,23 +619,17 @@ class Lissajous {
       this.freqX = 3;
       this.freqY = 2;
     }
-
-    // réinitialiser la position de la balle au point de départ
+    // Repositionne la balle au début
     const t = 0;
     this.ball.x =
       this.center.x + Math.cos(t * this.freqX) * this.motion_radiusX;
     this.ball.y =
       this.center.y + Math.sin(t * this.freqY) * this.motion_radiusY;
-
-    // ajouter le point de départ au tracé permanent
     this.permanentTrail.push({ x: this.ball.x, y: this.ball.y });
-
-    console.log(
-      `Changement vers le fichier MIDI: ${this.currentMidiFile}, useCircles: ${this.useCircles}`
-    );
     this.loadMidiFile();
   }
 
+  // --- Boucle principale d'animation ---
   update() {
     this.move();
     this.draw();
@@ -735,47 +637,38 @@ class Lissajous {
   }
 }
 
+// --- Initialisation de l'application au chargement de la page ---
 document.addEventListener("DOMContentLoaded", () => {
   const canvas = document.getElementById("canvas");
 
+  // Fonction pour adapter le canvas à la taille de la fenêtre
   function resizeCanvas() {
-    // obtenir les dimensions de l'écran
     const width = window.innerWidth;
     const height = window.innerHeight;
-
-    // définir la taille du canvas
     canvas.width = width;
     canvas.height = height;
-
-    // ajuster la taille du canvas pour les telephones
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     canvas.style.position = "fixed";
     canvas.style.top = "0";
     canvas.style.left = "0";
-
-    // désactiver le zoom sur tél
+    // Empêche le zoom sur mobile/tablette
     document.addEventListener(
       "touchmove",
       function (event) {
-        if (event.scale !== 1) {
-          event.preventDefault();
-        }
+        if (event.scale !== 1) event.preventDefault();
       },
       { passive: false }
     );
   }
-
-  // appeler resizeCanvas au chargement
   resizeCanvas();
-
-  // réajuster lors du changement d'orientation
   window.addEventListener("resize", resizeCanvas);
   window.addEventListener("orientationchange", resizeCanvas);
 
+  // Création de l'instance Lissajous et gestion des événements
   document.addEventListener("click", () => {
     const lissajous = new Lissajous(canvas);
-
+    // Gestion du tactile
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
       lissajous.handleTouchStart(e);
@@ -788,7 +681,6 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       lissajous.handleTouchEnd();
     });
-
     lissajous.update();
   });
 });
