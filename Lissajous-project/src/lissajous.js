@@ -37,6 +37,11 @@ class Lissajous {
     this.lastTapTime = 0;
     this.isTouching = false;
     this.lastTouchPosition = null;
+    this.speedMultiplier = 1;
+    this.speedButton = document.getElementById("speedButton");
+    this.curveButton = document.getElementById("curveButton");
+    this.setupSpeedButton();
+    this.setupCurveButton();
 
     // initialiser l'instrument
     this.synth = new Tone.Sampler({
@@ -55,6 +60,114 @@ class Lissajous {
     // Chargement du fichier MIDI initial
     this.loadMidiFile();
     this.animationFrame = 0;
+  }
+
+  setupSpeedButton() {
+    if (this.speedButton) {
+      // Afficher le bouton au début
+      this.speedButton.style.display = "block";
+
+      // Gérer le clic simple
+      this.speedButton.addEventListener("click", () => {
+        if (!this.isMusicFinished) {
+          this.isMusicFinished = true;
+          this.fadeStartTime = Date.now();
+          if (this.visualMidiNotes) {
+            this.visualMidiNotes.forEach((note) => {
+              note.triggered = false;
+              note.fadeStartTime = Date.now();
+            });
+          }
+          this.speedButton.style.display = "none";
+        }
+      });
+
+      // Gérer le toucher simple
+      this.speedButton.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        if (!this.isMusicFinished) {
+          this.isMusicFinished = true;
+          this.fadeStartTime = Date.now();
+          if (this.visualMidiNotes) {
+            this.visualMidiNotes.forEach((note) => {
+              note.triggered = false;
+              note.fadeStartTime = Date.now();
+            });
+          }
+          this.speedButton.style.display = "none";
+        }
+      });
+    }
+  }
+
+  setupCurveButton() {
+    if (this.curveButton) {
+      // Afficher le bouton au début
+      this.curveButton.style.display = "block";
+
+      // Gérer le clic simple
+      this.curveButton.addEventListener("click", () => {
+        if (!this.isMusicFinished) {
+          // Changer les fréquences pour une nouvelle courbe
+          const curves = [
+            { freqX: 3, freqY: 2 },
+            { freqX: 4, freqY: 3 },
+            { freqX: 5, freqY: 4 },
+            { freqX: 2, freqY: 3 },
+            { freqX: 3, freqY: 4 },
+          ];
+
+          // Trouver la prochaine courbe
+          const currentIndex = curves.findIndex(
+            (curve) => curve.freqX === this.freqX && curve.freqY === this.freqY
+          );
+          const nextIndex = (currentIndex + 1) % curves.length;
+          const nextCurve = curves[nextIndex];
+
+          // Appliquer la nouvelle courbe
+          this.freqX = nextCurve.freqX;
+          this.freqY = nextCurve.freqY;
+
+          // Effet visuel sur le bouton
+          this.curveButton.classList.add("active");
+          setTimeout(() => {
+            this.curveButton.classList.remove("active");
+          }, 200);
+        }
+      });
+
+      // Gérer le toucher simple
+      this.curveButton.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        if (!this.isMusicFinished) {
+          // Changer les fréquences pour une nouvelle courbe
+          const curves = [
+            { freqX: 3, freqY: 2 },
+            { freqX: 4, freqY: 3 },
+            { freqX: 5, freqY: 4 },
+            { freqX: 2, freqY: 3 },
+            { freqX: 3, freqY: 4 },
+          ];
+
+          // Trouver la prochaine courbe
+          const currentIndex = curves.findIndex(
+            (curve) => curve.freqX === this.freqX && curve.freqY === this.freqY
+          );
+          const nextIndex = (currentIndex + 1) % curves.length;
+          const nextCurve = curves[nextIndex];
+
+          // Appliquer la nouvelle courbe
+          this.freqX = nextCurve.freqX;
+          this.freqY = nextCurve.freqY;
+
+          // Effet visuel sur le bouton
+          this.curveButton.classList.add("active");
+          setTimeout(() => {
+            this.curveButton.classList.remove("active");
+          }, 200);
+        }
+      });
+    }
   }
 
   async loadMidiFile() {
@@ -83,6 +196,14 @@ class Lissajous {
         if (track.notes && track.notes.length > 0) notes.push(...track.notes);
       });
       this.playMidiSequenceWithTimeout(notes);
+
+      // Réafficher les boutons au début de chaque musique
+      if (this.speedButton) {
+        this.speedButton.style.display = "block";
+      }
+      if (this.curveButton) {
+        this.curveButton.style.display = "block";
+      }
     } catch (error) {
       console.error("Erreur lors du chargement du fichier MIDI:", error);
       // Si erreur, génère des lignes aléatoires pour l'affichage
@@ -164,7 +285,7 @@ class Lissajous {
       const currentTime = new Date().getTime();
       const percentage =
         (currentTime - this.startTime) / (this.TOTAL_TIME * 1000);
-      const t = percentage * Math.PI * 2;
+      const t = percentage * Math.PI * 2 * this.speedMultiplier;
       const newX =
         this.center.x + Math.cos(t * this.freqX) * this.motion_radiusX;
       const newY =
@@ -204,6 +325,13 @@ class Lissajous {
             note.triggered = false;
             note.fadeStartTime = Date.now();
           });
+        }
+        // Cacher les boutons
+        if (this.speedButton) {
+          this.speedButton.style.display = "none";
+        }
+        if (this.curveButton) {
+          this.curveButton.style.display = "none";
         }
       }
       // Gère le fondu visuel des notes et de la traînée
